@@ -2,15 +2,25 @@
 
 Recurring routines for Home Assistant without helpers or YAML automations. Each routine is configured through a UI wizard and exposes standard entities for dashboards (Mushroom, tile, button, entity cards).
 
-## Quick Start
+This project is built primarily for personal use. It is still straightforward to configure for your own routines, phones, and dashboards. If something breaks or is unclear, open a GitHub issue. You can also reach me at jbc@ivyydev.se or https://ivyydev.se/.
 
-1. Copy `custom_components/ha_routines` into your Home Assistant `config` folder, or run `sync-ha_routines.ps1` from this dev environment.
-2. Restart Home Assistant.
-3. Go to **Settings > Devices & services > Add integration** and search for **HA Routines**.
-4. Complete the hub setup, then click **Add routine** on the integration device page.
-5. Walk through the three-step wizard: basic info, schedule, reminders.
+## Quick Start (HACS)
+
+1. In Home Assistant, open **HACS**.
+2. Open the menu (three dots) → **Custom repositories**.
+3. Add:
+   - Repository: `https://github.com/ivyytheone/ha_routines`
+   - Category: **Integration**
+4. Find **HA Routines** in HACS and install it.
+5. Restart Home Assistant.
+6. Go to **Settings > Devices & services > Add integration** and search for **HA Routines**.
+7. Complete the hub setup, then click **Add routine** and walk through the wizard (name, doses/schedule, reminders).
 
 No YAML configuration is required.
+
+### Manual install (without HACS)
+
+Copy this repository into `/config/custom_components/ha_routines` (integration files are at the repo root), restart Home Assistant, then add the integration as above.
 
 ## How It Works
 
@@ -37,25 +47,11 @@ This verifies the integration files and restarts the Docker container. Files are
 
 ### Production / real Home Assistant
 
-Copy the whole folder to your live instance:
+Preferred: install via HACS (see Quick Start).
 
-```text
-custom_components/ha_routines/
-```
+Manual copy also works: place the integration files under `/config/custom_components/ha_routines`, restart, then add the integration and recreate routines in the wizard. Runtime history does not migrate unless you also copy `.storage/ha_routines_data` and matching config entries.
 
-Ways to transfer:
-
-1. **Samba / Studio Code Server / File editor:** paste the folder under `/config/custom_components/ha_routines`
-2. **scp / SFTP** from this machine to the HA host
-3. **HACS** (when published as a GitHub repo): install as a custom repository of type Integration
-
-Then:
-
-1. Restart Home Assistant
-2. Settings > Devices & services > Add integration > **HA Routines**
-3. Recreate routines in the wizard (runtime history does not migrate automatically unless you also copy `.storage/ha_routines_data` and matching config entries)
-
-Dev Docker and production are separate installs. Syncing this repo does not push to your real HA unless you copy the folder yourself.
+Dev Docker and production are separate installs. Syncing this repo does not push to your real HA unless you install or copy the files yourself.
 
 ### Quality checks
 
@@ -245,18 +241,26 @@ Restore `.storage/ha_routines_data` from backup together with `.storage/core.con
 
 The integration schedules reminders itself using `async_track_point_in_utc_time` and Home Assistant's configured timezone. After restart it reconciles past-due reminders and day roll-overs. No YAML automations are required.
 
-## HACS Publishing
+## Install with HACS
 
 This repository is HACS-ready. Integration files live at the repository root with `"content_in_root": true` in `hacs.json`.
 
-On your Home Assistant:
+1. HACS → menu (⋮) → **Custom repositories**
+2. Repository URL: `https://github.com/ivyytheone/ha_routines`
+3. Category: **Integration**
+4. Add the repository, then install **HA Routines**
+5. Restart Home Assistant
+6. Settings → Devices & services → Add integration → **HA Routines**
 
-1. HACS → Custom repositories
-2. URL: `https://github.com/ivyytheone/ha_routines`
-3. Category: Integration
-4. Install **HA Routines**, restart Home Assistant, then add the integration under Devices & services
+Updates: when a new version is on GitHub, use HACS → HA Routines → **Update**, then restart if prompted.
 
-Updates: push to GitHub, then use HACS → HA Routines → Update (or wait for HACS to show an update).
+### Support
+
+This integration is maintained mainly for the author's own Home Assistant setup. You are welcome to use and adapt it. There is no SLA.
+
+- Bugs, ideas, or questions: open an issue on https://github.com/ivyytheone/ha_routines/issues
+- Contact: jbc@ivyydev.se
+- Website: https://ivyydev.se/
 
 ## Tests
 
