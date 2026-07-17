@@ -1,0 +1,101 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Routines",
+        "description": "Skapa återkommande rutiner som hanteras helt av denna integration. Inga helpers eller YAML-automationer behövs."
+      }
+    },
+    "abort": {
+      "already_configured": "HA Routines är redan konfigurerad."
+    }
+  },
+  "config_subentries": {
+    "routine": {
+      "title": "Rutin",
+      "initiate_flow": {
+        "user": "Lägg till rutin"
+      },
+      "step": {
+        "user": {
+          "title": "Rutindetaljer",
+          "description": "Namnge rutinen och välj en ikon.",
+          "data": {
+            "name": "Rutinnamn",
+            "icon": "Ikon (MDI)",
+            "description": "Beskrivning (valfritt)"
+          }
+        },
+        "schedule": {
+          "title": "Schema",
+          "description": "Välj när {name} ska ske.",
+          "data": {
+            "schedule_type": "Schematyp",
+            "schedule_times": "När påminnelse (kommaseparerat, HH:MM)",
+            "days_of_week": "Veckodagar (0=mån .. 6=sön, kommaseparerat)",
+            "day_of_month": "Dag i månaden (månadsvis)",
+            "interval_hours": "Var X:e timme",
+            "interval_days_after_completion": "Var X:e dag efter slutförande",
+            "weekdays_only": "Endast vardagar",
+            "weekends_only": "Endast helger"
+          }
+        },
+        "reminders": {
+          "title": "Påminnelser",
+          "description": "Aviseringsinställningar för {name}. För dagliga/veckovisa scheman kommer tiderna från föregående steg.",
+          "data": {
+            "reminder_times": "Påminnelsetider (oftast samma som schematider)",
+            "reminder_repeat_minutes": "Upprepningsintervall (minuter)",
+            "max_reminders": "Maximalt antal påminnelser",
+            "notifications_enabled": "Aktivera aviseringar",
+            "notify_service": "Telefon / notify-mål",
+            "history_limit": "Historikgräns"
+          }
+        },
+        "reconfigure": {
+          "title": "Redigera rutin",
+          "description": "Konfigurera om alla inställningar för {name}."
+        }
+      },
+      "error": {
+        "weekdays_weekends_conflict": "Välj antingen endast vardagar eller endast helger, inte båda.",
+        "days_required": "Välj minst en dag för ett veckoschema.",
+        "already_configured": "En rutin med detta namn finns redan."
+      },
+      "abort": {
+        "already_configured": "En rutin med detta namn finns redan."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "routine_status": {
+        "name": "Status",
+        "state": {
+          "pending": "Väntar",
+          "reminder_sent": "Påminnelse skickad",
+          "snoozed": "Snoozad",
+          "completed": "Klar",
+          "skipped": "Hoppad över",
+          "missed": "Missad"
+        }
+      }
+    },
+    "binary_sensor": {
+      "completed_today": {
+        "name": "Klar idag"
+      }
+    },
+    "button": {
+      "complete": {
+        "name": "Rutin klar"
+      },
+      "snooze": {
+        "name": "Snooze"
+      },
+      "skip_today": {
+        "name": "Hoppa över idag"
+      }
+    }
+  }
+}

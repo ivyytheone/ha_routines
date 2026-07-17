@@ -1,0 +1,37 @@
+{
+  "entity": {
+    "sensor": {
+      "routine_status": {
+        "default": "mdi:clipboard-list-outline",
+        "state": {
+          "pending": "mdi:timer-sand",
+          "reminder_sent": "mdi:bell-ring",
+          "snoozed": "mdi:alarm-snooze",
+          "completed": "mdi:check-circle",
+          "skipped": "mdi:calendar-remove",
+          "missed": "mdi:alert-circle"
+        }
+      }
+    },
+    "binary_sensor": {
+      "completed_today": {
+        "default": "mdi:checkbox-blank-circle-outline",
+        "state": {
+          "on": "mdi:check-circle",
+          "off": "mdi:checkbox-blank-circle-outline"
+        }
+      }
+    },
+    "button": {
+      "complete": {
+        "default": "mdi:check-bold"
+      },
+      "snooze": {
+        "default": "mdi:alarm-snooze"
+      },
+      "skip_today": {
+        "default": "mdi:calendar-remove"
+      }
+    }
+  }
+}

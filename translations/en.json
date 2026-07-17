@@ -1,0 +1,101 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Routines",
+        "description": "Set up recurring routines managed entirely by this integration. No helpers or YAML automations are required."
+      }
+    },
+    "abort": {
+      "already_configured": "HA Routines is already configured."
+    }
+  },
+  "config_subentries": {
+    "routine": {
+      "title": "Routine",
+      "initiate_flow": {
+        "user": "Add routine"
+      },
+      "step": {
+        "user": {
+          "title": "Routine details",
+          "description": "Name your routine and choose an icon.",
+          "data": {
+            "name": "Routine name",
+            "icon": "Icon (MDI)",
+            "description": "Description (optional)"
+          }
+        },
+        "schedule": {
+          "title": "Schedule",
+          "description": "Choose when {name} should occur.",
+          "data": {
+            "schedule_type": "Schedule type",
+            "schedule_times": "When to remind (comma separated, HH:MM)",
+            "days_of_week": "Days of week (0=Mon .. 6=Sun, comma separated)",
+            "day_of_month": "Day of month (monthly)",
+            "interval_hours": "Every X hours",
+            "interval_days_after_completion": "Every X days after completion",
+            "weekdays_only": "Weekdays only",
+            "weekends_only": "Weekends only"
+          }
+        },
+        "reminders": {
+          "title": "Reminders",
+          "description": "Notification settings for {name}. For daily/weekly schedules, fire times come from the previous step.",
+          "data": {
+            "reminder_times": "Reminder times (usually same as schedule times)",
+            "reminder_repeat_minutes": "Repeat interval (minutes)",
+            "max_reminders": "Maximum reminders",
+            "notifications_enabled": "Enable notifications",
+            "notify_service": "Phone / notify target",
+            "history_limit": "History entry limit"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit routine",
+          "description": "Reconfigure all settings for {name}."
+        }
+      },
+      "error": {
+        "weekdays_weekends_conflict": "Choose either weekdays only or weekends only, not both.",
+        "days_required": "Select at least one day for a weekly schedule.",
+        "already_configured": "A routine with this name already exists."
+      },
+      "abort": {
+        "already_configured": "A routine with this name already exists."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "routine_status": {
+        "name": "Status",
+        "state": {
+          "pending": "Waiting",
+          "reminder_sent": "Reminder sent",
+          "snoozed": "Snoozed",
+          "completed": "Done",
+          "skipped": "Skipped",
+          "missed": "Missed"
+        }
+      }
+    },
+    "binary_sensor": {
+      "completed_today": {
+        "name": "Done today"
+      }
+    },
+    "button": {
+      "complete": {
+        "name": "Routine done"
+      },
+      "snooze": {
+        "name": "Snooze"
+      },
+      "skip_today": {
+        "name": "Skip today"
+      }
+    }
+  }
+}

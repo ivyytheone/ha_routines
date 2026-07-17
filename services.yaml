@@ -1,0 +1,71 @@
+# HA Routines services
+
+complete:
+  name: Complete
+  description: Mark a routine as completed.
+  fields:
+    routine_id:
+      name: Routine ID
+      description: Routine subentry id or related entity id.
+      required: true
+      example: "01ABCDEF"
+      selector:
+        text:
+
+snooze:
+  name: Snooze
+  description: Snooze a routine reminder.
+  fields:
+    routine_id:
+      name: Routine ID
+      description: Routine subentry id or related entity id.
+      required: true
+      example: "01ABCDEF"
+      selector:
+        text:
+    minutes:
+      name: Minutes
+      description: How long to snooze.
+      required: false
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: minutes
+
+skip_today:
+  name: Skip today
+  description: Skip the routine for today.
+  fields:
+    routine_id:
+      name: Routine ID
+      description: Routine subentry id or related entity id.
+      required: true
+      example: "01ABCDEF"
+      selector:
+        text:
+
+reset:
+  name: Reset
+  description: Reset routine runtime state to pending.
+  fields:
+    routine_id:
+      name: Routine ID
+      description: Routine subentry id or related entity id.
+      required: true
+      example: "01ABCDEF"
+      selector:
+        text:
+
+trigger_reminder:
+  name: Trigger reminder
+  description: Manually trigger a routine reminder (and notification if configured).
+  fields:
+    routine_id:
+      name: Routine ID
+      description: Routine subentry id or related entity id.
+      required: true
+      example: "01ABCDEF"
+      selector:
+        text:
