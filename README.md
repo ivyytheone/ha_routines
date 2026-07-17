@@ -90,8 +90,8 @@ Example (replace entity ids with yours from Developer tools > States):
 type: vertical-stack
 cards:
   - type: custom:mushroom-template-card
-    entity: sensor.pregabalin_status
-    primary: Pregabalin
+    entity: sensor.medication_status
+    primary: medication
     secondary: "{{ states(entity) }}"
     icon: >
       {% set s = states(entity) %}
@@ -110,36 +110,36 @@ cards:
   - type: horizontal-stack
     cards:
       - type: custom:mushroom-entity-card
-        entity: button.pregabalin_routine_done
+        entity: button.medication_routine_done
         name: Klar
         tap_action:
           action: call-service
           service: button.press
           target:
-            entity_id: button.pregabalin_routine_done
+            entity_id: button.medication_routine_done
       - type: custom:mushroom-entity-card
-        entity: button.pregabalin_snooze
+        entity: button.medication_snooze
         name: Snooze
         tap_action:
           action: call-service
           service: button.press
           target:
-            entity_id: button.pregabalin_snooze
+            entity_id: button.medication_snooze
       - type: custom:mushroom-entity-card
-        entity: button.pregabalin_skip_today
+        entity: button.medication_skip_today
         name: Hoppa över
         tap_action:
           action: call-service
           service: button.press
           target:
-            entity_id: button.pregabalin_skip_today
+            entity_id: button.medication_skip_today
 ```
 
 Built-in Tile card works without HACS custom cards:
 
 ```yaml
 type: tile
-entity: sensor.pregabalin_status
+entity: sensor.medication_status
 features_position: bottom
 vertical: false
 ```
