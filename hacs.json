@@ -2,7 +2,5 @@
   "name": "HA Routines",
   "homeassistant": "2025.2.0",
   "hacs": "1.32.0",
-  "zip_release": true,
-  "hide_default_branch": false,
-  "filename": "ha_routines.zip"
+  "render_readme": true
 }

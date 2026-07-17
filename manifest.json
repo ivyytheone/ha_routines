@@ -1,12 +1,12 @@
 {
   "domain": "ha_routines",
   "name": "HA Routines",
-  "codeowners": [],
+  "codeowners": ["@ivyytheone"],
   "config_flow": true,
-  "documentation": "https://github.com/home-assistant/ha_routines",
+  "documentation": "https://github.com/ivyytheone/ha_routines",
   "integration_type": "service",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/home-assistant/ha_routines/issues",
+  "issue_tracker": "https://github.com/ivyytheone/ha_routines/issues",
   "requirements": [],
-  "version": "0.2.9"
+  "version": "0.2.10"
 }

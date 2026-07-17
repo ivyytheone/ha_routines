@@ -1,0 +1,39 @@
+# * Bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# * Editors / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# * Local env and secrets (none expected for this integration)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.yaml
+
+# * Home Assistant runtime (must never be committed)
+.storage/
+home-assistant_v2.db*
+*.log
+
+# * Local tooling
+.venv/
+venv/

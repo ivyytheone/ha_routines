@@ -5,6 +5,12 @@ All notable changes to HA Routines are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10] - 2026-07-17
+
+### Changed
+
+- Repo prepared for public HACS install: `.gitignore`, removed tracked `__pycache__`, `hacs.json` without `zip_release`, correct GitHub documentation URLs
+
 ## [0.2.9] - 2026-07-17
 
 ### Changed

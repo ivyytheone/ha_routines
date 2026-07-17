@@ -232,8 +232,17 @@ The integration schedules reminders itself using `async_track_point_in_utc_time`
 
 ## HACS Publishing
 
-When this becomes a standalone repository, place `hacs.json` in the repository root. A template is included at `custom_components/ha_routines/hacs.json` for reference.
+This repository is HACS-ready (`hacs.json` in the repo root, integration files at the root).
+
+On your Home Assistant:
+
+1. HACS → Custom repositories
+2. URL: `https://github.com/ivyytheone/ha_routines`
+3. Category: Integration
+4. Install **HA Routines**, restart Home Assistant, then add the integration under Devices & services
+
+Updates: push to GitHub, then use HACS → HA Routines → Update (or wait for HACS to show an update).
 
 ## Tests
 
-Unit tests live under `tests/test_ha_routines/` and cover state machine, storage migration/trim, next-reminder calculation, DST edges, and restart day roll-over.
+Unit tests for this integration live in the development workspace under `tests/test_ha_routines/` (state machine, storage, scheduler, DST, restart roll-over). They are not shipped inside the HACS package.
