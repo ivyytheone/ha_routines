@@ -232,7 +232,7 @@ The integration schedules reminders itself using `async_track_point_in_utc_time`
 
 ## HACS Publishing
 
-This repository is HACS-ready (`hacs.json` in the repo root, integration files at the root).
+This repository is HACS-ready. Integration files live at the repository root with `"content_in_root": true` in `hacs.json`.
 
 On your Home Assistant:
 
