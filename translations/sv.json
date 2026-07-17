@@ -28,9 +28,13 @@
         },
         "schedule": {
           "title": "Schema",
-          "description": "Välj när {name} ska ske.",
+          "description": "Välj antal doser per dag och påminnelsetider inom varje dosfönster för {name}.",
           "data": {
             "schedule_type": "Schematyp",
+            "doses_per_day": "Doseringar per dag (1-3)",
+            "dose_1_times": "Dos 1 påminnelsetider (kommaseparerat HH:MM)",
+            "dose_2_times": "Dos 2 påminnelsetider (kommaseparerat HH:MM)",
+            "dose_3_times": "Dos 3 påminnelsetider (kommaseparerat HH:MM)",
             "schedule_times": "När påminnelse (kommaseparerat, HH:MM)",
             "days_of_week": "Veckodagar (0=mån .. 6=sön, kommaseparerat)",
             "day_of_month": "Dag i månaden (månadsvis)",
@@ -42,13 +46,17 @@
         },
         "reminders": {
           "title": "Påminnelser",
-          "description": "Aviseringsinställningar för {name}. För dagliga/veckovisa scheman kommer tiderna från föregående steg.",
+          "description": "Aviseringsinställningar för {name}. Dostider kommer från föregående steg. Du kan öppna en dashboard när notisen trycks.",
           "data": {
             "reminder_times": "Påminnelsetider (oftast samma som schematider)",
             "reminder_repeat_minutes": "Upprepningsintervall (minuter)",
             "max_reminders": "Maximalt antal påminnelser",
             "notifications_enabled": "Aktivera aviseringar",
             "notify_service": "Telefon / notify-mål",
+            "notification_open_dashboard": "Öppna dashboard vid tryck på notis",
+            "notification_dashboard": "Dashboard",
+            "notification_view_path": "Vy-path (t.ex. 0 eller pregabalin)",
+            "notification_click_path": "Egen path (t.ex. /dashboard-medicin/0)",
             "history_limit": "Historikgräns"
           }
         },
@@ -60,6 +68,7 @@
       "error": {
         "weekdays_weekends_conflict": "Välj antingen endast vardagar eller endast helger, inte båda.",
         "days_required": "Välj minst en dag för ett veckoschema.",
+        "dose_times_required": "Dos 1 behöver minst en påminnelsetid.",
         "already_configured": "En rutin med detta namn finns redan."
       },
       "abort": {
@@ -75,10 +84,14 @@
           "pending": "Väntar",
           "reminder_sent": "Påminnelse skickad",
           "snoozed": "Snoozad",
+          "partial": "Dos tagen",
           "completed": "Klar",
           "skipped": "Hoppad över",
           "missed": "Missad"
         }
+      },
+      "dose_progress": {
+        "name": "Dosprogress"
       }
     },
     "binary_sensor": {

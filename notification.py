@@ -90,10 +90,12 @@ def _resolve_mobile_app_notify_service(
     return None
 
 
-def _reminder_action_data(routine_id: str) -> dict[str, Any]:
+def _reminder_action_data(
+    routine_id: str, click_path: str | None = None
+) -> dict[str, Any]:
     """Build Companion action payload (iOS + Android)."""
     # * Keep this iOS-clean: no Android-only keys (channel/importance/ttl/priority)
-    return {
+    data: dict[str, Any] = {
         "actions": [
             {"action": ACTION_COMPLETE, "title": "Tagit"},
             {"action": ACTION_SNOOZE, "title": "Snooze"},
@@ -104,6 +106,11 @@ def _reminder_action_data(routine_id: str) -> dict[str, Any]:
             "sound": {"name": "default", "critical": 0, "volume": 1.0},
         },
     }
+    if click_path:
+        # * Tap opens Companion to this relative dashboard path
+        data["url"] = click_path
+        data["clickAction"] = click_path
+    return data
 
 
 async def _async_call_notify(
@@ -195,12 +202,13 @@ async def async_send_routine_notification(
     )
 
     try:
+        click_path = (config["reminders"].get("notification_click_path") or "").strip()
         return await _async_call_notify(
             hass,
             notify_target,
             title=title,
             message=message,
-            data=_reminder_action_data(routine_id),
+            data=_reminder_action_data(routine_id, click_path or None),
         )
     except Exception:
         _LOGGER.exception(

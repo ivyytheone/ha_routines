@@ -87,7 +87,12 @@ class RoutineScheduler:
                 continue
 
             # * Past-due after restart: fire reminder or mark missed
-            if state in (RoutineState.PENDING, RoutineState.SNOOZED, RoutineState.REMINDER_SENT):
+            if state in (
+                RoutineState.PENDING,
+                RoutineState.PARTIAL,
+                RoutineState.SNOOZED,
+                RoutineState.REMINDER_SENT,
+            ):
                 await self._async_handle_due(routine_id, now=now)
 
         await self.coordinator.async_persist()
@@ -172,6 +177,7 @@ class RoutineScheduler:
 
         if state in (
             RoutineState.PENDING,
+            RoutineState.PARTIAL,
             RoutineState.SNOOZED,
             RoutineState.REMINDER_SENT,
         ):

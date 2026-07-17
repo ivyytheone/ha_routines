@@ -22,12 +22,20 @@ from .const import (
     CONF_DAY_OF_MONTH,
     CONF_DAYS_OF_WEEK,
     CONF_DESCRIPTION,
+    CONF_DOSE_1_TIMES,
+    CONF_DOSE_2_TIMES,
+    CONF_DOSE_3_TIMES,
+    CONF_DOSES_PER_DAY,
     CONF_HISTORY_LIMIT,
     CONF_ICON,
     CONF_INTERVAL_DAYS_AFTER_COMPLETION,
     CONF_INTERVAL_HOURS,
     CONF_MAX_REMINDERS,
     CONF_NAME,
+    CONF_NOTIFICATION_CLICK_PATH,
+    CONF_NOTIFICATION_DASHBOARD,
+    CONF_NOTIFICATION_OPEN_DASHBOARD,
+    CONF_NOTIFICATION_VIEW_PATH,
     CONF_NOTIFICATIONS_ENABLED,
     CONF_NOTIFY_SERVICE,
     CONF_REMINDER_REPEAT_MINUTES,
@@ -36,18 +44,20 @@ from .const import (
     CONF_SCHEDULE_TYPE,
     CONF_WEEKDAYS_ONLY,
     CONF_WEEKENDS_ONLY,
+    DEFAULT_DOSES_PER_DAY,
     DEFAULT_HISTORY_LIMIT,
     DEFAULT_ICON,
     DEFAULT_MAX_REMINDERS,
     DEFAULT_REMINDER_REPEAT_MINUTES,
     DEFAULT_REMINDER_TIMES,
     DOMAIN,
+    MAX_DOSES_PER_DAY,
     SCHEDULE_DAILY,
     SCHEDULE_TYPES,
     SCHEDULE_WEEKLY,
     SUBENTRY_TYPE_ROUTINE,
 )
-from .models import routine_config_from_flow_data, slugify
+from .models import normalize_routine_config, routine_config_from_flow_data, slugify
 
 
 def _notify_entity_selector(hass: HomeAssistant) -> selector.EntitySelector:
@@ -69,6 +79,28 @@ def _notify_entity_selector(hass: HomeAssistant) -> selector.EntitySelector:
     return selector.EntitySelector(
         selector.EntitySelectorConfig(domain="notify", multiple=False)
     )
+
+
+def _dashboard_options(hass: HomeAssistant) -> list[dict[str, str]]:
+    """Build dashboard select options from Lovelace when available."""
+    options: list[dict[str, str]] = [
+        {"value": "lovelace", "label": "Overview (lovelace)"},
+    ]
+    lovelace_data = hass.data.get("lovelace")
+    dashboards = getattr(lovelace_data, "dashboards", None)
+    if not isinstance(dashboards, dict):
+        return options
+
+    seen = {"lovelace"}
+    for url_path, dashboard in dashboards.items():
+        path = str(url_path or "").strip() or "lovelace"
+        if path in seen:
+            continue
+        seen.add(path)
+        config = getattr(dashboard, "config", None) or {}
+        title = str(config.get("title") or path)
+        options.append({"value": path, "label": f"{title} ({path})"})
+    return options
 
 
 def _parse_days_of_week(raw: str) -> list[int]:
@@ -93,16 +125,35 @@ def _join_times(times: list[Any] | None, fallback: str = DEFAULT_REMINDER_TIMES)
 
 def _flow_data_from_routine_config(config: dict[str, Any]) -> dict[str, Any]:
     """Flatten stored RoutineConfig into wizard form fields."""
-    schedule = dict(config.get("schedule") or {})
-    reminders = dict(config.get("reminders") or {})
+    normalized = normalize_routine_config(config)
+    schedule = dict(normalized.get("schedule") or {})
+    reminders = dict(normalized.get("reminders") or {})
+    doses = list(schedule.get("doses") or [])
     times = list(schedule.get("times") or reminders.get("reminder_times") or ["08:00"])
     days = list(schedule.get("days_of_week") or list(range(7)))
     notify = reminders.get("notify_service")
+    click_path = str(reminders.get("notification_click_path") or "").strip()
+    dashboard = "lovelace"
+    view_path = "0"
+    if click_path.startswith("/"):
+        parts = [part for part in click_path.strip("/").split("/") if part]
+        if parts:
+            dashboard = parts[0]
+            view_path = parts[1] if len(parts) > 1 else "0"
+
+    dose_defaults = [DEFAULT_REMINDER_TIMES, "", ""]
+    for index, dose in enumerate(doses[:MAX_DOSES_PER_DAY]):
+        dose_defaults[index] = _join_times(list(dose.get("times") or []))
+
     return {
-        CONF_NAME: str(config.get("name") or ""),
-        CONF_ICON: str(config.get("icon") or DEFAULT_ICON),
-        CONF_DESCRIPTION: str(config.get("description") or ""),
+        CONF_NAME: str(normalized.get("name") or ""),
+        CONF_ICON: str(normalized.get("icon") or DEFAULT_ICON),
+        CONF_DESCRIPTION: str(normalized.get("description") or ""),
         CONF_SCHEDULE_TYPE: str(schedule.get("schedule_type") or SCHEDULE_DAILY),
+        CONF_DOSES_PER_DAY: int(schedule.get("doses_per_day") or len(doses) or 1),
+        CONF_DOSE_1_TIMES: dose_defaults[0],
+        CONF_DOSE_2_TIMES: dose_defaults[1],
+        CONF_DOSE_3_TIMES: dose_defaults[2],
         CONF_SCHEDULE_TIMES: _join_times(times),
         CONF_DAYS_OF_WEEK: ",".join(str(day) for day in days),
         CONF_DAY_OF_MONTH: int(schedule.get("day_of_month") or 1),
@@ -123,7 +174,11 @@ def _flow_data_from_routine_config(config: dict[str, Any]) -> dict[str, Any]:
             reminders.get("notifications_enabled", True)
         ),
         CONF_NOTIFY_SERVICE: str(notify) if notify else None,
-        CONF_HISTORY_LIMIT: int(config.get("history_limit") or DEFAULT_HISTORY_LIMIT),
+        CONF_NOTIFICATION_OPEN_DASHBOARD: bool(click_path),
+        CONF_NOTIFICATION_DASHBOARD: dashboard,
+        CONF_NOTIFICATION_VIEW_PATH: view_path,
+        CONF_NOTIFICATION_CLICK_PATH: click_path,
+        CONF_HISTORY_LIMIT: int(normalized.get("history_limit") or DEFAULT_HISTORY_LIMIT),
     }
 
 
@@ -158,7 +213,7 @@ def _basic_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 
 def _schedule_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Step 2 schema with optional defaults."""
+    """Step 2 schema with dose windows."""
     return vol.Schema(
         {
             vol.Required(
@@ -166,8 +221,20 @@ def _schedule_schema(defaults: dict[str, Any]) -> vol.Schema:
                 default=str(defaults.get(CONF_SCHEDULE_TYPE, SCHEDULE_DAILY)),
             ): vol.In(SCHEDULE_TYPES),
             vol.Optional(
-                CONF_SCHEDULE_TIMES,
-                default=str(defaults.get(CONF_SCHEDULE_TIMES, DEFAULT_REMINDER_TIMES)),
+                CONF_DOSES_PER_DAY,
+                default=int(defaults.get(CONF_DOSES_PER_DAY, DEFAULT_DOSES_PER_DAY)),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_DOSES_PER_DAY)),
+            vol.Optional(
+                CONF_DOSE_1_TIMES,
+                default=str(defaults.get(CONF_DOSE_1_TIMES, DEFAULT_REMINDER_TIMES)),
+            ): str,
+            vol.Optional(
+                CONF_DOSE_2_TIMES,
+                default=str(defaults.get(CONF_DOSE_2_TIMES, "")),
+            ): str,
+            vol.Optional(
+                CONF_DOSE_3_TIMES,
+                default=str(defaults.get(CONF_DOSE_3_TIMES, "")),
             ): str,
             vol.Optional(
                 CONF_DAYS_OF_WEEK,
@@ -200,12 +267,14 @@ def _schedule_schema(defaults: dict[str, Any]) -> vol.Schema:
 def _reminders_schema(
     hass: HomeAssistant, defaults: dict[str, Any]
 ) -> vol.Schema:
-    """Step 3 schema with optional defaults."""
+    """Step 3 schema with notify target and optional dashboard click path."""
     schedule_default = str(
-        defaults.get(CONF_SCHEDULE_TIMES)
+        defaults.get(CONF_DOSE_1_TIMES)
+        or defaults.get(CONF_SCHEDULE_TIMES)
         or defaults.get(CONF_REMINDER_TIMES)
         or DEFAULT_REMINDER_TIMES
     )
+    dashboard_options = _dashboard_options(hass)
     schema: dict[Any, Any] = {
         vol.Optional(
             CONF_REMINDER_TIMES,
@@ -227,6 +296,27 @@ def _reminders_schema(
             CONF_NOTIFICATIONS_ENABLED,
             default=bool(defaults.get(CONF_NOTIFICATIONS_ENABLED, True)),
         ): bool,
+        vol.Optional(
+            CONF_NOTIFICATION_OPEN_DASHBOARD,
+            default=bool(defaults.get(CONF_NOTIFICATION_OPEN_DASHBOARD, False)),
+        ): bool,
+        vol.Optional(
+            CONF_NOTIFICATION_DASHBOARD,
+            default=str(defaults.get(CONF_NOTIFICATION_DASHBOARD, "lovelace")),
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=dashboard_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Optional(
+            CONF_NOTIFICATION_VIEW_PATH,
+            default=str(defaults.get(CONF_NOTIFICATION_VIEW_PATH, "0")),
+        ): str,
+        vol.Optional(
+            CONF_NOTIFICATION_CLICK_PATH,
+            default=str(defaults.get(CONF_NOTIFICATION_CLICK_PATH, "")),
+        ): str,
         vol.Optional(
             CONF_HISTORY_LIMIT,
             default=int(defaults.get(CONF_HISTORY_LIMIT, DEFAULT_HISTORY_LIMIT)),
@@ -303,19 +393,28 @@ class RoutineSubentryFlowHandler(ConfigSubentryFlow):
     async def async_step_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
-        """Step 2: schedule configuration."""
+        """Step 2: schedule and dose windows."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             schedule_type = user_input.get(CONF_SCHEDULE_TYPE, SCHEDULE_DAILY)
+            doses_per_day = int(user_input.get(CONF_DOSES_PER_DAY) or 1)
             if user_input.get(CONF_WEEKDAYS_ONLY) and user_input.get(CONF_WEEKENDS_ONLY):
                 errors["base"] = "weekdays_weekends_conflict"
             elif schedule_type == SCHEDULE_WEEKLY and not user_input.get(
                 CONF_DAYS_OF_WEEK
             ):
                 errors["base"] = "days_required"
+            elif doses_per_day >= 1 and not str(
+                user_input.get(CONF_DOSE_1_TIMES) or ""
+            ).strip():
+                errors["base"] = "dose_times_required"
             else:
                 self._wizard_data.update(user_input)
+                # * Keep legacy schedule_times aligned for reminder step defaults
+                self._wizard_data[CONF_SCHEDULE_TIMES] = str(
+                    user_input.get(CONF_DOSE_1_TIMES) or DEFAULT_REMINDER_TIMES
+                )
                 return await self.async_step_reminders()
 
         return self.async_show_form(

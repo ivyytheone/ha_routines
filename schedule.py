@@ -12,7 +12,13 @@ from .const import (
     SCHEDULE_MONTHLY,
     SCHEDULE_WEEKLY,
 )
-from .models import RoutineConfig, RoutineRuntime, RoutineState
+from .models import (
+    RoutineConfig,
+    RoutineRuntime,
+    RoutineState,
+    dose_windows,
+    normalize_routine_config,
+)
 
 
 def parse_hhmm(value: str) -> time:
@@ -43,12 +49,12 @@ def _allowed_days(config: RoutineConfig) -> set[int]:
 
 
 def reminder_times(config: RoutineConfig) -> list[str]:
-    """Return sorted HH:MM strings used when reminders should fire."""
-    # * Day-based: prefer schedule.times (wizard step 2). Reminder-step times are fallback.
-    schedule = config["schedule"]
+    """Return sorted HH:MM strings across all dose windows (compat helper)."""
+    normalized = normalize_routine_config(config)
+    schedule = normalized["schedule"]
     schedule_type = schedule.get("schedule_type", SCHEDULE_DAILY)
     schedule_times = list(schedule.get("times") or [])
-    reminder_list = list(config["reminders"].get("reminder_times") or [])
+    reminder_list = list(normalized["reminders"].get("reminder_times") or [])
 
     if schedule_type == SCHEDULE_INTERVAL_HOURS:
         raw = reminder_list or schedule_times or ["08:00"]
@@ -62,47 +68,57 @@ def _reminder_times(config: RoutineConfig) -> list[str]:
     return reminder_times(config)
 
 
+def _completed_dose_indices(runtime: RoutineRuntime) -> set[str]:
+    """Return completed dose indices, ignoring legacy HH:MM slot values."""
+    return {
+        str(slot)
+        for slot in list(runtime.get("completed_slots") or [])
+        if ":" not in str(slot)
+    }
+
+
+def current_dose_index(config: RoutineConfig, runtime: RoutineRuntime) -> int | None:
+    """Return the first incomplete dose index, or None when all doses are done."""
+    windows = dose_windows(normalize_routine_config(config))
+    completed = _completed_dose_indices(runtime)
+    for index in range(len(windows)):
+        if str(index) not in completed:
+            return index
+    return None
+
+
 def resolve_completion_slot(
     config: RoutineConfig,
     runtime: RoutineRuntime,
     now: datetime | None = None,
     timezone_name: str = "UTC",
 ) -> str | None:
-    """Pick which scheduled HH:MM slot a completion should close."""
-    tz = resolve_timezone(timezone_name)
-    now_local = (now or datetime.now(UTC)).astimezone(tz)
-    times = _reminder_times(config)
-    completed = set(runtime.get("completed_slots") or [])
-
-    if runtime.get("last_reminder_at"):
-        reminded = datetime.fromisoformat(str(runtime["last_reminder_at"])).astimezone(
-            tz
-        )
-        best: str | None = None
-        for time_str in times:
-            if parse_hhmm(time_str) <= reminded.time() and time_str not in completed:
-                best = time_str
-        if best is not None:
-            return best
-
-    for time_str in reversed(times):
-        candidate = _combine_local(now_local.date(), time_str, tz)
-        if candidate <= now_local and time_str not in completed:
-            return time_str
-
-    for time_str in times:
-        if time_str not in completed:
-            return time_str
-    return None
+    """Pick which dose index a completion should close."""
+    del now, timezone_name
+    index = current_dose_index(config, runtime)
+    if index is None:
+        return None
+    return str(index)
 
 
 def remaining_slots_today(
     config: RoutineConfig,
     runtime: RoutineRuntime,
 ) -> list[str]:
-    """Return scheduled times not yet completed today."""
-    completed = set(runtime.get("completed_slots") or [])
-    return [time_str for time_str in _reminder_times(config) if time_str not in completed]
+    """Return dose indices not yet completed today."""
+    windows = dose_windows(normalize_routine_config(config))
+    completed = _completed_dose_indices(runtime)
+    return [str(index) for index in range(len(windows)) if str(index) not in completed]
+
+
+def doses_taken_count(runtime: RoutineRuntime) -> int:
+    """Count completed dose indices for today."""
+    return len(_completed_dose_indices(runtime))
+
+
+def doses_total_count(config: RoutineConfig) -> int:
+    """Return configured doses per day."""
+    return max(1, len(dose_windows(normalize_routine_config(config))))
 
 
 def _combine_local(day: date, time_str: str, tz: ZoneInfo) -> datetime:
@@ -120,6 +136,26 @@ def _clamp_day_of_month(year: int, month: int, day_of_month: int) -> date:
     return date(year, month, 1)
 
 
+def _iter_dose_reminder_candidates(
+    config: RoutineConfig,
+    runtime: RoutineRuntime,
+    day: date,
+    today: date,
+    tz: ZoneInfo,
+) -> list[datetime]:
+    """Build candidate reminder datetimes for one calendar day using dose windows."""
+    windows = dose_windows(normalize_routine_config(config))
+    completed = _completed_dose_indices(runtime)
+    candidates: list[datetime] = []
+    for index, times in enumerate(windows):
+        if day == today and str(index) in completed:
+            continue
+        for time_str in times:
+            candidates.append(_combine_local(day, time_str, tz))
+        # * If earlier dose times already passed, later doses can still fire today
+    return candidates
+
+
 def compute_next_reminder_at(
     config: RoutineConfig,
     runtime: RoutineRuntime,
@@ -127,6 +163,7 @@ def compute_next_reminder_at(
     timezone_name: str = "UTC",
 ) -> str | None:
     """Compute the next reminder datetime as UTC ISO string."""
+    config = normalize_routine_config(config)
     tz = resolve_timezone(timezone_name)
     now_utc = now or datetime.now(UTC)
     if now_utc.tzinfo is None:
@@ -153,7 +190,6 @@ def compute_next_reminder_at(
         return str(runtime["snoozed_until"])
 
     schedule_type = config["schedule"].get("schedule_type", SCHEDULE_DAILY)
-    completed_slots = set(runtime.get("completed_slots") or [])
 
     if schedule_type == SCHEDULE_INTERVAL_HOURS:
         hours = int(config["schedule"].get("interval_hours") or 4)
@@ -182,8 +218,8 @@ def compute_next_reminder_at(
         next_day = day + timedelta(days=1)
         return _combine_local(next_day, times[0], tz).astimezone(UTC).isoformat()
 
-    times = _reminder_times(config)
     allowed = _allowed_days(config)
+    today = now_local.date()
 
     if schedule_type == SCHEDULE_MONTHLY:
         target_dom = int(config["schedule"].get("day_of_month") or 1)
@@ -191,27 +227,33 @@ def compute_next_reminder_at(
             year = now_local.year + (now_local.month + month_offset - 1) // 12
             month = (now_local.month + month_offset - 1) % 12 + 1
             day = _clamp_day_of_month(year, month, target_dom)
-            if day < now_local.date():
+            if day < today:
                 continue
-            for time_str in times:
-                if day == now_local.date() and time_str in completed_slots:
-                    continue
-                candidate = _combine_local(day, time_str, tz)
+            for candidate in _iter_dose_reminder_candidates(
+                config, runtime, day, today, tz
+            ):
                 if candidate > now_local:
                     return candidate.astimezone(UTC).isoformat()
         return None
 
-    # * Daily and weekly: skip completed slots for today so 12:00 still fires after 08:00
+    # * Daily and weekly: only fire times for the current incomplete dose
     for day_offset in range(0, 15):
-        day = now_local.date() + timedelta(days=day_offset)
+        day = today + timedelta(days=day_offset)
         if schedule_type == SCHEDULE_WEEKLY and day.weekday() not in allowed:
             continue
         if schedule_type == SCHEDULE_DAILY and day.weekday() not in allowed:
             continue
-        for time_str in times:
-            if day_offset == 0 and time_str in completed_slots:
-                continue
-            candidate = _combine_local(day, time_str, tz)
+        day_runtime = runtime
+        if day_offset > 0:
+            # * Future days ignore today's completed doses
+            day_runtime = {
+                **runtime,
+                "completed_slots": [],
+                "completed_today": False,
+            }
+        for candidate in _iter_dose_reminder_candidates(
+            config, day_runtime, day, today, tz
+        ):
             if candidate > now_local:
                 return candidate.astimezone(UTC).isoformat()
     return None
@@ -233,7 +275,12 @@ def should_reset_day(
             or runtime.get("skipped_today")
             or runtime.get("completed_slots")
             or RoutineState(runtime["state"])
-            in (RoutineState.COMPLETED, RoutineState.SKIPPED, RoutineState.MISSED)
+            in (
+                RoutineState.COMPLETED,
+                RoutineState.SKIPPED,
+                RoutineState.MISSED,
+                RoutineState.PARTIAL,
+            )
         )
     return str(cycle_date) != today
 

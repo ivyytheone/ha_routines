@@ -37,6 +37,7 @@ from .models import (
     can_transition,
     default_runtime_for_config,
     get_routine_runtime,
+    normalize_routine_config,
     utc_now_iso,
 )
 from .schedule import (
@@ -103,7 +104,7 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
         subentry = config_entry.subentries.get(routine_id)
         if subentry is None or subentry.subentry_type != SUBENTRY_TYPE_ROUTINE:
             return None
-        return cast(RoutineConfig, dict(subentry.data))
+        return normalize_routine_config(cast(RoutineConfig, dict(subentry.data)))
 
     def ensure_routine_runtime(self, subentry: ConfigSubentry) -> RoutineRuntime:
         """Create or return runtime state for a subentry."""
@@ -115,7 +116,7 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
         runtime = default_runtime_for_config(routine_id)
         tz = resolve_timezone(self.timezone_name)
         runtime["cycle_date"] = datetime.now(tz).date().isoformat()
-        config = cast(RoutineConfig, dict(subentry.data))
+        config = normalize_routine_config(cast(RoutineConfig, dict(subentry.data)))
         runtime["next_reminder_at"] = compute_next_reminder_at(
             config, runtime, timezone_name=self.timezone_name
         )
@@ -212,18 +213,18 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
     async def async_complete(
         self, routine_id: str, source: str = "manual"
     ) -> RoutineRuntime:
-        """Mark the current dose/slot as done; keep later slots the same day."""
+        """Mark the current dose as done; keep later doses the same day."""
         runtime = self._require_runtime(routine_id)
         current = RoutineState(runtime["state"])
         if current not in (
             RoutineState.PENDING,
             RoutineState.REMINDER_SENT,
             RoutineState.SNOOZED,
+            RoutineState.PARTIAL,
         ):
             raise ValueError(
                 f"Cannot complete routine {routine_id} from state {current}"
             )
-        self._require_transition(runtime, RoutineState.COMPLETED)
 
         config = self.get_routine_config(self.entry, routine_id)
         now_iso = utc_now_iso()
@@ -248,9 +249,11 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
         trim_history(runtime, self._history_limit(routine_id))
 
         more_today = bool(config and remaining_slots_today(config, runtime))
+        target = RoutineState.PARTIAL if more_today else RoutineState.COMPLETED
+        self._require_transition(runtime, target)
         if more_today:
-            # * e.g. took 08:00 dose, still expect 12:00 later today
-            runtime["state"] = RoutineState.PENDING
+            # * e.g. took dose 1, still expect dose 2 later today
+            runtime["state"] = RoutineState.PARTIAL
             runtime["completed_today"] = False
         else:
             runtime["state"] = RoutineState.COMPLETED
@@ -360,7 +363,7 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
         current = RoutineState(runtime["state"])
         if current == RoutineState.SNOOZED:
             self._require_transition(runtime, RoutineState.REMINDER_SENT)
-        elif current == RoutineState.PENDING:
+        elif current in (RoutineState.PENDING, RoutineState.PARTIAL):
             self._require_transition(runtime, RoutineState.REMINDER_SENT)
         elif current == RoutineState.REMINDER_SENT:
             pass
@@ -478,7 +481,7 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
         # * Late imports avoid circular import with platform modules
         from .binary_sensor import CompletedTodayBinarySensor
         from .button import CompleteButton, SkipTodayButton, SnoozeButton
-        from .sensor import RoutineStatusSensor
+        from .sensor import DoseProgressSensor, RoutineStatusSensor
 
         if self.entry is None:
             return
@@ -489,7 +492,10 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
 
         if self._async_add_sensors:
             self._async_add_sensors(
-                [RoutineStatusSensor(self, self.entry, subentry, routine_id)],
+                [
+                    RoutineStatusSensor(self, self.entry, subentry, routine_id),
+                    DoseProgressSensor(self, self.entry, subentry, routine_id),
+                ],
                 config_subentry_id=routine_id,
             )
         if self._async_add_binary_sensors:

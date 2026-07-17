@@ -72,13 +72,27 @@ python -m pytest tests/test_ha_routines -q --import-mode=importlib
 
 | Entity | Purpose |
 |--------|---------|
-| `sensor.*_status` | Current state + attributes (next reminder, streaks, history) |
-| `binary_sensor.*_completed_today` | On when completed today |
-| `button.*_complete` | Mark completed |
+| `sensor.*_status` | Current state (`pending`, `partial`, `completed`, …) |
+| `sensor.*_dose_progress` | Dose progress today (`1/2`, attributes `doses_taken` / `doses_total`) |
+| `binary_sensor.*_completed_today` | On when all doses are completed today |
+| `button.*_complete` | Mark current dose completed |
 | `button.*_snooze` | Snooze reminder |
 | `button.*_skip_today` | Skip for today |
 
-Status values: `pending`, `reminder_sent`, `snoozed`, `completed`, `skipped`, `missed`. UI shows translated labels (e.g. Klar / Done). Icons change per state via `icons.json`.
+Status values: `pending`, `reminder_sent`, `snoozed`, `partial`, `completed`, `skipped`, `missed`.
+
+After the first dose of a multi-dose day, status becomes **Dos tagen** (`partial`) instead of jumping back to only **Väntar**. Use `dose_progress` on dashboards for `1 av 2`-style cards.
+
+### Dose windows
+
+In the schedule step, set **doses per day** (1-3) and reminder times per dose. Times inside one dose are retries until that dose is marked taken. Example:
+
+- Dose 1: `08:30,09:00,09:30`
+- Dose 2: `11:30,12:00,12:30`
+
+### Notification dashboard tap
+
+In the reminders step, enable **Open dashboard on notification tap**, pick a dashboard (and optional view path), or set a custom path like `/dashboard-medicin/0`. A normal tap on the Companion notification opens that path; long-press still shows Tagit / Snooze.
 
 ## Lovelace / Mushroom
 
@@ -208,9 +222,10 @@ Stored in the config entry subentry `data` field via the config flow wizard. Pic
 ## State Machine
 
 ```text
-Pending -> Reminder Sent | Snoozed | Completed | Skipped | Missed
-Reminder Sent -> Completed | Snoozed | Skipped | Missed | Pending
-Snoozed -> Reminder Sent | Snoozed (extend) | Completed | Skipped | Pending
+Pending -> Reminder Sent | Snoozed | Partial | Completed | Skipped | Missed
+Reminder Sent -> Completed | Partial | Snoozed | Skipped | Missed | Pending
+Snoozed -> Reminder Sent | Snoozed (extend) | Partial | Completed | Skipped | Pending
+Partial -> Reminder Sent | Snoozed | Partial | Completed | Skipped | Missed | Pending
 Completed | Skipped | Missed -> Pending (next cycle)
 ```
 

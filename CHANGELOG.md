@@ -5,6 +5,20 @@ All notable changes to HA Routines are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-17
+
+### Added
+
+- Dose windows: 1-3 doses per day, each with its own reminder times (e.g. 08:30/09:00/09:30 then 11:30/12:00)
+- Status `partial` (**Dos tagen**) when some but not all doses are taken today
+- `sensor.*_dose_progress` showing `1/2` style progress
+- Optional notification tap path to open a Lovelace dashboard (`url` + `clickAction`) configured in the routine wizard
+
+### Changed
+
+- Completing a dose closes the whole dose window, not a single HH:MM slot
+- Legacy flat `schedule.times` lists migrate to one dose per time
+
 ## [0.2.11] - 2026-07-17
 
 ### Fixed

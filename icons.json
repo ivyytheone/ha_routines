@@ -7,10 +7,14 @@
           "pending": "mdi:timer-sand",
           "reminder_sent": "mdi:bell-ring",
           "snoozed": "mdi:alarm-snooze",
+          "partial": "mdi:check-circle-outline",
           "completed": "mdi:check-circle",
           "skipped": "mdi:calendar-remove",
           "missed": "mdi:alert-circle"
         }
+      },
+      "dose_progress": {
+        "default": "mdi:pill-multiple"
       }
     },
     "binary_sensor": {

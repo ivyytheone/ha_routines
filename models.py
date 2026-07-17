@@ -6,14 +6,16 @@ import re
 import uuid
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from .const import (
+    DEFAULT_DOSES_PER_DAY,
     DEFAULT_HISTORY_LIMIT,
     DEFAULT_ICON,
     DEFAULT_MAX_REMINDERS,
     DEFAULT_REMINDER_REPEAT_MINUTES,
     DEFAULT_REMINDER_TIMES,
+    MAX_DOSES_PER_DAY,
     SCHEDULE_DAILY,
     SCHEDULE_INTERVAL_HOURS,
     STORAGE_VERSION,
@@ -26,6 +28,8 @@ class RoutineState(StrEnum):
     PENDING = "pending"
     REMINDER_SENT = "reminder_sent"
     SNOOZED = "snoozed"
+    # * At least one dose taken today, more doses still remain
+    PARTIAL = "partial"
     COMPLETED = "completed"
     SKIPPED = "skipped"
     MISSED = "missed"
@@ -46,8 +50,8 @@ VALID_TRANSITIONS: dict[RoutineState, frozenset[RoutineState]] = {
     RoutineState.PENDING: frozenset(
         {
             RoutineState.REMINDER_SENT,
-            # * Dashboard snooze before the reminder fires ("remind me later")
             RoutineState.SNOOZED,
+            RoutineState.PARTIAL,
             RoutineState.COMPLETED,
             RoutineState.SKIPPED,
             RoutineState.MISSED,
@@ -56,20 +60,31 @@ VALID_TRANSITIONS: dict[RoutineState, frozenset[RoutineState]] = {
     RoutineState.REMINDER_SENT: frozenset(
         {
             RoutineState.COMPLETED,
+            RoutineState.PARTIAL,
             RoutineState.SNOOZED,
             RoutineState.SKIPPED,
             RoutineState.MISSED,
-            # * Multi-dose days: completing 08:00 returns to pending for 12:00
             RoutineState.PENDING,
         }
     ),
     RoutineState.SNOOZED: frozenset(
         {
             RoutineState.REMINDER_SENT,
-            # * Pressing snooze again extends the delay
             RoutineState.SNOOZED,
+            RoutineState.PARTIAL,
             RoutineState.COMPLETED,
             RoutineState.SKIPPED,
+            RoutineState.PENDING,
+        }
+    ),
+    RoutineState.PARTIAL: frozenset(
+        {
+            RoutineState.REMINDER_SENT,
+            RoutineState.SNOOZED,
+            RoutineState.PARTIAL,
+            RoutineState.COMPLETED,
+            RoutineState.SKIPPED,
+            RoutineState.MISSED,
             RoutineState.PENDING,
         }
     ),
@@ -79,11 +94,19 @@ VALID_TRANSITIONS: dict[RoutineState, frozenset[RoutineState]] = {
 }
 
 
+class DoseConfig(TypedDict, total=False):
+    """One dose window with one or more reminder times."""
+
+    times: list[str]
+
+
 class ScheduleConfig(TypedDict, total=False):
     """Schedule definition stored on the subentry."""
 
     schedule_type: str
     times: list[str]
+    doses_per_day: int
+    doses: list[DoseConfig]
     days_of_week: list[int]
     day_of_month: int
     interval_hours: int
@@ -100,6 +123,7 @@ class ReminderConfig(TypedDict, total=False):
     max_reminders: int
     notifications_enabled: bool
     notify_service: str | None
+    notification_click_path: str | None
 
 
 class RoutineConfig(TypedDict):
@@ -139,6 +163,7 @@ class RoutineRuntime(TypedDict):
     skipped_today: bool
     cycle_date: str | None
     last_reminder_at: str | None
+    # * Dose indices as strings: "0", "1", "2"
     completed_slots: list[str]
 
 
@@ -182,11 +207,84 @@ def parse_time_list(raw: str) -> list[str]:
     return times or parse_time_list(DEFAULT_REMINDER_TIMES)
 
 
+def flatten_dose_times(doses: list[DoseConfig]) -> list[str]:
+    """Flatten dose windows into a sorted unique HH:MM list."""
+    seen: set[str] = set()
+    flat: list[str] = []
+    for dose in doses:
+        for time_str in list(dose.get("times") or []):
+            if time_str not in seen:
+                seen.add(time_str)
+                flat.append(time_str)
+    return flat or parse_time_list(DEFAULT_REMINDER_TIMES)
+
+
+def doses_from_flat_times(times: list[str]) -> list[DoseConfig]:
+    """Legacy: each scheduled HH:MM becomes its own dose."""
+    normalized = times or parse_time_list(DEFAULT_REMINDER_TIMES)
+    return [cast(DoseConfig, {"times": [time_str]}) for time_str in normalized]
+
+
+def normalize_schedule_doses(schedule: ScheduleConfig) -> ScheduleConfig:
+    """Ensure schedule has doses / doses_per_day; migrate flat times if needed."""
+    updated = cast(ScheduleConfig, dict(schedule))
+    raw_doses = list(updated.get("doses") or [])
+    doses: list[DoseConfig] = []
+    for dose in raw_doses:
+        times = list(dose.get("times") or [])
+        if times:
+            doses.append(cast(DoseConfig, {"times": times}))
+
+    if not doses:
+        flat = list(updated.get("times") or [])
+        doses = doses_from_flat_times(flat)
+
+    doses = doses[:MAX_DOSES_PER_DAY]
+    updated["doses"] = doses
+    updated["doses_per_day"] = len(doses)
+    updated["times"] = flatten_dose_times(doses)
+    return updated
+
+
+def normalize_routine_config(config: RoutineConfig | dict[str, Any]) -> RoutineConfig:
+    """Return a RoutineConfig with normalized dose windows and reminder fields."""
+    schedule = normalize_schedule_doses(
+        cast(ScheduleConfig, dict(config.get("schedule") or {}))
+    )
+    reminders = cast(ReminderConfig, dict(config.get("reminders") or {}))
+    if schedule.get("schedule_type") != SCHEDULE_INTERVAL_HOURS:
+        reminders["reminder_times"] = list(schedule.get("times") or [])
+    click_path = reminders.get("notification_click_path")
+    if click_path is not None:
+        cleaned = str(click_path).strip()
+        reminders["notification_click_path"] = cleaned or None
+    return {
+        "name": str(config.get("name") or "Routine"),
+        "icon": str(config.get("icon") or DEFAULT_ICON),
+        "description": config.get("description"),
+        "schedule": schedule,
+        "reminders": reminders,
+        "history_limit": int(config.get("history_limit") or DEFAULT_HISTORY_LIMIT),
+    }
+
+
+def dose_windows(config: RoutineConfig) -> list[list[str]]:
+    """Return reminder time lists per dose index."""
+    schedule = normalize_schedule_doses(
+        cast(ScheduleConfig, dict(config.get("schedule") or {}))
+    )
+    return [list(dose.get("times") or []) for dose in list(schedule.get("doses") or [])]
+
+
 def default_schedule_config(schedule_type: str = SCHEDULE_DAILY) -> ScheduleConfig:
     """Return default schedule config for a schedule type."""
+    times = parse_time_list(DEFAULT_REMINDER_TIMES)
+    doses = doses_from_flat_times(times)
     config: ScheduleConfig = {
         "schedule_type": schedule_type,
-        "times": parse_time_list(DEFAULT_REMINDER_TIMES),
+        "times": times,
+        "doses": doses,
+        "doses_per_day": len(doses),
         "days_of_week": [0, 1, 2, 3, 4, 5, 6],
         "weekdays_only": False,
         "weekends_only": False,
@@ -208,6 +306,7 @@ def default_reminder_config() -> ReminderConfig:
         "max_reminders": DEFAULT_MAX_REMINDERS,
         "notifications_enabled": True,
         "notify_service": None,
+        "notification_click_path": None,
     }
 
 
@@ -242,13 +341,42 @@ def default_storage() -> HaRoutinesStorage:
     }
 
 
+def _doses_from_flow_data(flow_data: dict[str, Any]) -> list[DoseConfig]:
+    """Build dose windows from wizard fields."""
+    doses_per_day = int(flow_data.get("doses_per_day") or DEFAULT_DOSES_PER_DAY)
+    doses_per_day = max(1, min(MAX_DOSES_PER_DAY, doses_per_day))
+
+    dose_keys = ("dose_1_times", "dose_2_times", "dose_3_times")
+    doses: list[DoseConfig] = []
+    for index in range(doses_per_day):
+        raw = flow_data.get(dose_keys[index])
+        if raw:
+            times = parse_time_list(str(raw))
+        elif index == 0 and flow_data.get("schedule_times"):
+            # * Single flat list without dose fields: one dose per time (legacy wizard)
+            flat = parse_time_list(str(flow_data["schedule_times"]))
+            if doses_per_day == 1 and len(flat) > 1:
+                # * Explicit 1 dose/day with multiple reminder times in schedule_times
+                return [cast(DoseConfig, {"times": flat})]
+            if not flow_data.get("doses_per_day"):
+                return doses_from_flat_times(flat)
+            times = [flat[0]] if flat else parse_time_list(DEFAULT_REMINDER_TIMES)
+        else:
+            times = parse_time_list(DEFAULT_REMINDER_TIMES)
+        doses.append(cast(DoseConfig, {"times": times}))
+    return doses
+
+
 def routine_config_from_flow_data(flow_data: dict[str, Any]) -> RoutineConfig:
     """Build a RoutineConfig from wizard step data."""
     schedule_type = str(flow_data.get("schedule_type", SCHEDULE_DAILY))
     schedule = default_schedule_config(schedule_type)
 
-    if times := flow_data.get("schedule_times"):
-        schedule["times"] = parse_time_list(str(times))
+    doses = _doses_from_flow_data(flow_data)
+    schedule["doses"] = doses
+    schedule["doses_per_day"] = len(doses)
+    schedule["times"] = flatten_dose_times(doses)
+
     if days := flow_data.get("days_of_week"):
         schedule["days_of_week"] = [int(day) for day in days]
     if day_of_month := flow_data.get("day_of_month"):
@@ -275,21 +403,36 @@ def routine_config_from_flow_data(flow_data: dict[str, Any]) -> RoutineConfig:
     if notify_service := flow_data.get("notify_service"):
         reminders["notify_service"] = str(notify_service)
 
-    # * Day-based fire times come from the schedule step; keep reminder_times aligned
+    click_path: str | None = None
+    if flow_data.get("notification_open_dashboard"):
+        custom = str(flow_data.get("notification_click_path") or "").strip()
+        if custom:
+            click_path = custom if custom.startswith("/") else f"/{custom}"
+        else:
+            dashboard = str(flow_data.get("notification_dashboard") or "").strip()
+            view = str(flow_data.get("notification_view_path") or "0").strip() or "0"
+            if dashboard:
+                dash = dashboard.strip("/")
+                click_path = f"/{dash}/{view}"
+    reminders["notification_click_path"] = click_path
+
+    # * Day-based fire times come from dose windows; keep reminder_times aligned
     if schedule_type != SCHEDULE_INTERVAL_HOURS and schedule.get("times"):
         reminders["reminder_times"] = list(schedule["times"])
 
     description_value = flow_data.get("description")
     description = str(description_value).strip() if description_value else None
 
-    return {
-        "name": str(flow_data["name"]).strip(),
-        "icon": str(flow_data.get("icon") or DEFAULT_ICON),
-        "description": description,
-        "schedule": schedule,
-        "reminders": reminders,
-        "history_limit": int(flow_data.get("history_limit", DEFAULT_HISTORY_LIMIT)),
-    }
+    return normalize_routine_config(
+        {
+            "name": str(flow_data["name"]).strip(),
+            "icon": str(flow_data.get("icon") or DEFAULT_ICON),
+            "description": description,
+            "schedule": schedule,
+            "reminders": reminders,
+            "history_limit": int(flow_data.get("history_limit", DEFAULT_HISTORY_LIMIT)),
+        }
+    )
 
 
 def migrate_storage(data: dict[str, Any]) -> HaRoutinesStorage:
@@ -318,6 +461,10 @@ def _normalize_runtime(routine_id: str, runtime: dict[str, Any]) -> RoutineRunti
     except ValueError:
         state = RoutineState.PENDING
 
+    # * Legacy completed_slots used HH:MM; dose mode uses "0","1","2"
+    raw_slots = [str(slot) for slot in list(runtime.get("completed_slots") or [])]
+    completed_slots = [slot for slot in raw_slots if ":" not in slot]
+
     normalized: RoutineRuntime = {
         "routine_id": str(runtime.get("routine_id", routine_id)),
         "state": state,
@@ -335,9 +482,7 @@ def _normalize_runtime(routine_id: str, runtime: dict[str, Any]) -> RoutineRunti
         "skipped_today": bool(runtime.get("skipped_today", False)),
         "cycle_date": runtime.get("cycle_date"),
         "last_reminder_at": runtime.get("last_reminder_at"),
-        "completed_slots": [
-            str(slot) for slot in list(runtime.get("completed_slots") or [])
-        ],
+        "completed_slots": completed_slots,
     }
     return normalized
 
