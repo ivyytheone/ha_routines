@@ -5,6 +5,12 @@ All notable changes to HA Routines are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Allow snooze, complete and skip actions from missed state. Users can now take action on routines that were marked as missed instead of being blocked with "Cannot complete routine from state missed" error.
+
 ## [0.3.0] - 2026-07-17
 
 ### Added

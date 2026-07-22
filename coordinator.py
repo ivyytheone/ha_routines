@@ -221,6 +221,7 @@ class RoutinesCoordinator(DataUpdateCoordinator[HaRoutinesStorage]):
             RoutineState.REMINDER_SENT,
             RoutineState.SNOOZED,
             RoutineState.PARTIAL,
+            RoutineState.MISSED,
         ):
             raise ValueError(
                 f"Cannot complete routine {routine_id} from state {current}"

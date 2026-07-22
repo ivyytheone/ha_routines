@@ -90,7 +90,15 @@ VALID_TRANSITIONS: dict[RoutineState, frozenset[RoutineState]] = {
     ),
     RoutineState.COMPLETED: frozenset({RoutineState.PENDING}),
     RoutineState.SKIPPED: frozenset({RoutineState.PENDING}),
-    RoutineState.MISSED: frozenset({RoutineState.PENDING}),
+    RoutineState.MISSED: frozenset(
+        {
+            RoutineState.SNOOZED,
+            RoutineState.PARTIAL,
+            RoutineState.COMPLETED,
+            RoutineState.SKIPPED,
+            RoutineState.PENDING,
+        }
+    ),
 }
 
 
